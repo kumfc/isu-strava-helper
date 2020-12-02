@@ -50,13 +50,13 @@ unsafeWindow.strava = async () => {
         } else {
             el = e; // чел ты
         }
-		let user_url = el.children[0].href;
-		let user_pid = user_url.match(':([0-9]{6})$')[1];
+        let user_url = el.children[0].href;
+        let user_pid = user_url.match(':([0-9]{6})$')[1];
         if(phys_app){
             let session_id = user_url.match('2153:19:([0-9]+):')[1];
             user_url = `https://isu.ifmo.ru/pls/apex/f?p=2143:PERSON:${session_id}::NO:RP:PID:${user_pid}`;
         }
-		await unsafeWindow.$.get(user_url, function(profile){
+        await unsafeWindow.$.get(user_url, function(profile){
             let strava_url = profile.match('{"skype":{"data":{"text":"(.*?)"');
             if(!strava_url){
                 console.log(`User ${user_pid} hasn\'t specified strava url in his profile!`);
@@ -66,7 +66,7 @@ unsafeWindow.strava = async () => {
                 console.log(`${user_pid}: ${strava_url}`);
             }
         });
-	}
+    }
 
     for (const pid of users) {
         let strava_profile = await corsRequest('GET', users[pid].strava_url);
