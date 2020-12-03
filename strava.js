@@ -53,9 +53,10 @@ unsafeWindow.strava = async () => {
         let user_url = el.children[0].href;
         let user_pid = user_url.match(':([0-9]{6})$')[1];
         if(phys_app){
-            try {
-                let session_id = user_url.match('2153:19:([0-9]+):')[1];
-            } catch(e){
+            let session_id = user_url.match('2153:19:([0-9]+):');
+            if(session_id){
+                session_id = session_id[1];
+            } else {
                 continue;
             }
             user_url = `https://isu.ifmo.ru/pls/apex/f?p=2143:PERSON:${session_id}::NO:RP:PID:${user_pid}`;
