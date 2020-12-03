@@ -67,7 +67,7 @@ unsafeWindow.strava = async () => {
             user_url = `https://isu.ifmo.ru/pls/apex/f?p=2143:PERSON:${session_id}::NO:RP:PID:${user_pid}`;
         }
         await unsafeWindow.$.get(user_url, function(profile){
-            let strava_url = profile.match('{"skype":{"data":{"text":"(.*?)"');
+            let strava_url = profile.match('"skype":{"data":{"text":"(.*?)"');
             if(!strava_url){
                 console.log(`User ${user_pid} hasn\'t specified strava url in his profile!`);
             } else {
@@ -105,6 +105,9 @@ unsafeWindow.strava = async () => {
     }
 
     for (const pid of users) {
+        if(userdata[pid] === undefined){
+            continue;
+        ]
         let parsed = `Имя: ${userdata[pid].name}`
         for (const activity of userdata[pid].activity){
             parsed += `EOL============================EOL${activity.parsed}`
