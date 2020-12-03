@@ -107,7 +107,7 @@ unsafeWindow.strava = async () => {
     for (const pid of users) {
         if(userdata[pid] === undefined){
             continue;
-        ]
+        }
         let parsed = `Имя: ${userdata[pid].name}`
         for (const activity of userdata[pid].activity){
             parsed += `EOL============================EOL${activity.parsed}`
