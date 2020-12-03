@@ -51,7 +51,12 @@ unsafeWindow.strava = async () => {
             el = e; // чел ты
         }
         let user_url = el.children[0].href;
-        let user_pid = user_url.match(':([0-9]{6})$')[1];
+        let user_pid = user_url.match(':([0-9]{6})$');
+        if(user_pid){
+            user_pid = user_pid[1];
+        } else {
+            continue;
+        }
         if(phys_app){
             let session_id = user_url.match('2153:19:([0-9]+):');
             if(session_id){
