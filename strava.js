@@ -11,7 +11,7 @@
 // @connect      cdn-1.strava.com
 // ==/UserScript==
 
-const magic = '';
+const magic = undefined;
 const global_time = 1598918400;
 
 async function getToken(){
