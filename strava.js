@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         ISU Strava Helper
-// @version      0.2
+// @version      1.0
 // @description  blabla
 // @author       umfc
 // @match        https://isu.ifmo.ru/*
@@ -46,6 +46,15 @@ async function parseStravaWithApi(users){
 
     for (const pid of users) {
         console.log(`Parsing strava profile of student ${pid}`);
+
+        try{
+            if(!users[pid].strava_id){
+                users[pid].strava_id = await resolveStravaHandle(users[pid].strava_url);
+            }
+        } catch (e) {
+            console.log(`Strava handle resolving problems while parsing strava profile of student ${pid}`);
+        }
+
         let activities = await getAthleteProfile(users[pid].strava_id, token);
         let date_break = false,
             last_activity_date = 0;
@@ -65,13 +74,13 @@ async function parseStravaWithApi(users){
                 if(data.type == 'Ride' && data.distance >= 5000){
                     data.valid = 'да';
                     userdata[pid].valid_count_overall++;
-                    if(thisWeek(time)){
+                    if(inAWeek(time)){
                         userdata[pid].valid_count++;
                     }
                 } else if (data.type == 'Run' && data.distance >= 3000){
                     data.valid = 'да';
                     userdata[pid].valid_count_overall++;
-                    if(thisWeek(time)){
+                    if(inAWeek(time)){
                         userdata[pid].valid_count++;
                     }
                 } else {
@@ -199,11 +208,17 @@ async function parseStudents(){
                 console.log(`Student ${user_pid} hasn\'t specified strava url in his profile!`);
             } else {
                 strava_url = strava_url[1];
-                let strava_id = strava_url.match('athletes/([0-9]+)');
-                if(!strava_id){
-                    console.log(`Student ${user_pid} hasn\'t specified incorrect strava url in his profile!`);
+                let strava_handle = strava_url.match('athletes/([0-9a-z]+)');
+                if(!strava_handle){
+                    console.log(`Student ${user_pid} has specified incorrect strava url in his profile!`);
                 } else {
-                    strava_id = strava_id[1];
+                    let strava_id;
+                    strava_handle = strava_handle[1];
+                    if(!strava_handle.match('^[0-9]+$')){
+                        strava_id = 0;
+                    } else {
+                        strava_id = strava_handle;
+                    }
                     users[user_pid] = {'strava_url': strava_url, 'strava_id': strava_id, 'element': el};
                     console.log(`${user_pid}: ${strava_url}`);
                 }
@@ -211,6 +226,11 @@ async function parseStudents(){
         });
     }
     return users;
+}
+
+async function resolveStravaHandle(url){
+    let resp = await corsRequest('GET', url);
+    return resp.match('<meta content=\'https:\/\/www.strava.com\/athletes\/([0-9]+)\'')[1];
 }
 
 function createStravaIconElement(data){
@@ -267,6 +287,13 @@ function thisWeek(date){
     current.setUTCHours(0, 0, 0, 0);
     let week_start = Date.parse(current) / 1000 - ((current.getUTCDay() + 7) % 8 - 1) * 86400;
     return date >= week_start;
+}
+
+function inAWeek(date){
+    let current = new Date();
+    current.setUTCHours(0, 0, 0, 0);
+    let week_ago = Date.parse(current) / 1000 - 7 * 86400;
+    return date >= week_ago;
 }
 
 Object.prototype[Symbol.iterator] = function() {
