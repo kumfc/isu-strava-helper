@@ -13,6 +13,8 @@
 
 const magic = undefined;
 const global_time = 1598918400;
+const date_start = new Date("2020-09-01");
+const date_end = new Date("2020-12-31");
 
 async function getToken(){
     if(GM_getValue('strava_token') === undefined || GM_getValue('strava_token') === ''){
@@ -59,13 +61,15 @@ async function parseStravaWithApi(users){
         let date_break = false,
             last_activity_date = 0;
 
-        userdata[pid] = {'activity': [], 'valid_count': 0, 'valid_count_overall': 0};
+        userdata[pid] = {'activity': [], 'valid_count': 0, 'valid_count_overall': 0, 'valid_count_by_date': {}};
 
         while(activities.length > 0 && !date_break){
             // console.log(activities);
             for (const activity of activities){
                 let data = activity.item;
                 let time = Date.parse(data.start_date) / 1000;
+                let date = new Date(data.start_date).toISOString().slice(0,10);
+                let kmMin = ((data.moving_time / 60) / (data.distance / 1000)).toFixed(1);
                 if(time < global_time){
                     date_break = true;
                     break;
@@ -74,19 +78,28 @@ async function parseStravaWithApi(users){
                 if(data.type == 'Ride' && data.distance >= 5000){
                     data.valid = 'да';
                     userdata[pid].valid_count_overall++;
+                    if(userdata[pid].valid_count_by_date[date]){
+                        userdata[pid].valid_count_by_date[date] += 1;
+                    } else {
+                        userdata[pid].valid_count_by_date[date] = 1;
+                    }
                     if(inAWeek(time)){
                         userdata[pid].valid_count++;
                     }
                 } else if (data.type == 'Run' && data.distance >= 3000){
                     data.valid = 'да';
                     userdata[pid].valid_count_overall++;
+                    if(userdata[pid].valid_count_by_date[date]){
+                        userdata[pid].valid_count_by_date[date] += 1;
+                    } else {
+                        userdata[pid].valid_count_by_date[date] = 1;
+                    }
                     if(inAWeek(time)){
                         userdata[pid].valid_count++;
                     }
                 } else {
                     data.valid = 'нет';
                 }
-                let kmMin = ((data.moving_time / 60) / (data.distance / 1000)).toFixed(1);
                 data.parsed = `<b>Дата:</b> ${formatDateFromUnixtime(data.start_date * 1000)}<br><b>Тип:</b> ${data.type}<br><b>Дистанция:</b> ${(data.distance / 1000).toFixed(1)} км<br><b>Время:</b> ${(data.moving_time / 60).toFixed(1)} минут<br><b>Минут на 1 км:</b> ${kmMin}<br><b>Удовлетворяет условиям:</b> ${data.valid}`;
                 userdata[pid].activity.push(data);
                 last_activity_date = data.start_date;
@@ -103,7 +116,7 @@ function formatDateFromUnixtime(unixtime){
     return d.toLocaleString('default', {year: 'numeric', month: 'long', day: 'numeric'});
 }
 
-unsafeWindow.strava = async () => {
+unsafeWindow.strava = async (exportCsv = false, csvName = 'export.csv') => {
     if(magic === undefined){
         return console.log('Magic variable is not defined!');
     }
@@ -127,6 +140,29 @@ unsafeWindow.strava = async () => {
         e.innerHTML += '  ';
         e.appendChild(createStravaIconElement(parsed));
         e.innerHTML += ' ' + userdata[pid].valid_count + ' | ' + userdata[pid].valid_count_overall;
+    }
+
+    if(exportCsv){
+        let dates = generateDates(date_start, date_end);
+        let csvContent = 'data:text/csv;charset=utf-8,\uFEFFТабельный номер;ФИО;' + dates.join(';') + ';Всего\r\n';
+        for (const pid of users) {
+            csvContent += `${pid};${users[pid].name};`;
+            for (const date of dates){
+                if(userdata[pid].valid_count_by_date[date]){
+                    csvContent += userdata[pid].valid_count_by_date[date] * 5 + ';';
+                } else {
+                    csvContent += '0;';
+                }
+            }
+            csvContent += `${userdata[pid].valid_count_overall * 5}\r\n`;
+        }
+
+        let link = document.createElement('a');
+        link.setAttribute('href', encodeURI(csvContent));
+        link.setAttribute('download', csvName);
+        link.setAttribute('style', 'display: hidden;');
+        document.body.appendChild(link);
+        link.click();
     }
 }
 
@@ -187,6 +223,7 @@ async function parseStudents(){
             el = e; // чел ты
         }
         let user_url = el.children[0].href;
+        let user_name = el.children[0].innerHTML;
         let user_pid = user_url.match(':([0-9]{6})$');
         if(user_pid){
             user_pid = user_pid[1];
@@ -203,11 +240,12 @@ async function parseStudents(){
             user_url = `https://isu.ifmo.ru/pls/apex/f?p=2143:PERSON:${session_id}::NO:RP:PID:${user_pid}`;
         }
         await unsafeWindow.$.get(user_url, function(profile){
-            let strava_url = profile.match('"skype":{"data":{"text":"(.*?)"');
+            //let strava_url = profile.match('"skype":{"data":{"text":"(.*?)"');
+            let strava_url = profile.match('(strava\.com\/athletes\/[0-9a-z]+)');
             if(!strava_url){
                 console.log(`Student ${user_pid} hasn\'t specified strava url in his profile!`);
             } else {
-                strava_url = strava_url[1];
+                strava_url = `https://www.${strava_url[1]}`;
                 let strava_handle = strava_url.match('athletes/([0-9a-z]+)');
                 if(!strava_handle){
                     console.log(`Student ${user_pid} has specified incorrect strava url in his profile!`);
@@ -219,7 +257,7 @@ async function parseStudents(){
                     } else {
                         strava_id = strava_handle;
                     }
-                    users[user_pid] = {'strava_url': strava_url, 'strava_id': strava_id, 'element': el};
+                    users[user_pid] = {'strava_url': strava_url, 'strava_id': strava_id, 'element': el, 'name': user_name};
                     console.log(`${user_pid}: ${strava_url}`);
                 }
             }
@@ -262,6 +300,13 @@ function corsRequest(method, url, data = '', headers = {}) {
             }
         })
     });
+}
+
+function generateDates(start, end){
+    for(var arr=[], dt=new Date(start); dt<=end; dt.setDate(dt.getDate()+1)){
+        arr.push(new Date(dt));
+    }
+    return arr.map((v)=>v.toISOString().slice(0,10));
 }
 
 function parseDate(date){
