@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         ISU Strava Helper
-// @version      1.0
+// @version      1.5
 // @description  blabla
 // @author       umfc
 // @match        https://isu.ifmo.ru/*
@@ -12,9 +12,8 @@
 // ==/UserScript==
 
 const magic = undefined;
-const global_time = 1598918400;
-const date_start = new Date("2020-09-01");
-const date_end = new Date("2020-12-31");
+const date_start = new Date("2021-02-01");
+const date_end = new Date("2021-03-01");
 
 async function getToken(){
     if(GM_getValue('strava_token') === undefined || GM_getValue('strava_token') === ''){
@@ -61,7 +60,7 @@ async function parseStravaWithApi(users){
         let date_break = false,
             last_activity_date = 0;
 
-        userdata[pid] = {'activity': [], 'valid_count': 0, 'valid_count_overall': 0, 'valid_count_by_date': {}};
+        userdata[pid] = {'activity': [], 'valid_count': 0, 'valid_count_overall': 0, 'valid_ride_count_by_date': {}, 'valid_ride_count_by_week': {}, 'valid_run_count_by_date': {}, 'valid_run_count_by_week': {}};
 
         while(activities.length > 0 && !date_break){
             // console.log(activities);
@@ -69,31 +68,38 @@ async function parseStravaWithApi(users){
                 let data = activity.item;
                 let time = Date.parse(data.start_date) / 1000;
                 let date = new Date(data.start_date).toISOString().slice(0,10);
-                let kmMin = ((data.moving_time / 60) / (data.distance / 1000)).toFixed(1);
-                if(time < global_time){
+                let weekNumber = getWeekNumber(data.start_date);
+                let kmMin = Number(((data.moving_time / 60) / (data.distance / 1000)).toFixed(1));
+                if(time < Date.parse(date_start) / 1000){
                     date_break = true;
                     break;
                 }
                 data.start_date = time;
-                if(data.type == 'Ride' && data.distance >= 5000){
+                if(data.type == 'Ride' && data.distance >= 5000 && kmMin > 3 && kmMin < 6 && !userdata[pid].valid_ride_count_by_date[date] && (!userdata[pid].valid_ride_count_by_week[weekNumber] || userdata[pid].valid_ride_count_by_week[weekNumber] < 3)){
                     data.valid = 'да';
                     userdata[pid].valid_count_overall++;
-                    if(userdata[pid].valid_count_by_date[date]){
-                        userdata[pid].valid_count_by_date[date] += 1;
+                    userdata[pid].valid_ride_count_by_date[date] = 1;
+                    
+                    if(userdata[pid].valid_ride_count_by_week[weekNumber]){
+                        userdata[pid].valid_ride_count_by_week[weekNumber] += 1;
                     } else {
-                        userdata[pid].valid_count_by_date[date] = 1;
+                        userdata[pid].valid_ride_count_by_week[weekNumber] = 1;
                     }
+                    
                     if(inAWeek(time)){
                         userdata[pid].valid_count++;
                     }
-                } else if (data.type == 'Run' && data.distance >= 3000){
+                } else if (data.type == 'Run' && data.distance >= 3000 && kmMin > 4.5 && kmMin < 8 && !userdata[pid].valid_run_count_by_date[date] && (!userdata[pid].valid_run_count_by_week[weekNumber] || userdata[pid].valid_run_count_by_week[weekNumber] < 3)){
                     data.valid = 'да';
                     userdata[pid].valid_count_overall++;
-                    if(userdata[pid].valid_count_by_date[date]){
-                        userdata[pid].valid_count_by_date[date] += 1;
+                    userdata[pid].valid_run_count_by_date[date] = 1;
+                    
+                    if(userdata[pid].valid_run_count_by_week[weekNumber]){
+                        userdata[pid].valid_run_count_by_week[weekNumber] += 1;
                     } else {
-                        userdata[pid].valid_count_by_date[date] = 1;
+                        userdata[pid].valid_run_count_by_week[weekNumber] = 1;
                     }
+                    
                     if(inAWeek(time)){
                         userdata[pid].valid_count++;
                     }
@@ -109,6 +115,14 @@ async function parseStravaWithApi(users){
     }
 
     return userdata;
+}
+
+function getWeekNumber(d){
+    d = new Date(d);
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    let yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    let weekNo = Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+    return `${weekNo}/${d.getUTCFullYear()}`;
 }
 
 function formatDateFromUnixtime(unixtime){
@@ -131,7 +145,7 @@ unsafeWindow.strava = async (exportCsv = false, csvName = 'export.csv') => {
         if(userdata[pid] === undefined){
             continue;
         }
-        let parsed = `<h4>Удовлетворяющих условиям тренировок</h4><b>В течение этой недели:</b> ${userdata[pid].valid_count}<br><b>В течение семестра:</b> ${userdata[pid].valid_count_overall}`;
+        let parsed = `<h4>Удовлетворяющих условиям тренировок</h4><b>В течение этой недели:</b> ${userdata[pid].valid_count}<br><b>В течение заданного периода:</b> ${userdata[pid].valid_count_overall}`;
         for (const activity of userdata[pid].activity){
             parsed += `<hr>${activity.parsed}`
         }
@@ -148,11 +162,16 @@ unsafeWindow.strava = async (exportCsv = false, csvName = 'export.csv') => {
         for (const pid of users) {
             csvContent += `${pid};${users[pid].name};`;
             for (const date of dates){
-                if(userdata[pid].valid_count_by_date[date]){
-                    csvContent += userdata[pid].valid_count_by_date[date] * 5 + ';';
-                } else {
-                    csvContent += '0;';
+                let valid_by_date = 0;
+                
+                if(userdata[pid].valid_ride_count_by_date[date]){
+                    valid_by_date += userdata[pid].valid_ride_count_by_date[date];
                 }
+                if(userdata[pid].valid_run_count_by_date[date]){
+                    valid_by_date += userdata[pid].valid_run_count_by_date[date];
+                }
+                
+                csvContent += valid_by_date * 5 + ';';
             }
             csvContent += `${userdata[pid].valid_count_overall * 5}\r\n`;
         }
